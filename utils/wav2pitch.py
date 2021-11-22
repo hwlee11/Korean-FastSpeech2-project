@@ -113,7 +113,8 @@ def main(args):
 
     for wavFile in fileList:
 
-        file_id = wavFile.replace('./','').replace('.wav','')
+        file_id = wavFile.split('/')[-1]
+        file_id = file_id.split('.')[0]
         x,fs =sf.read(wavFile)
         f0 = extractF0(x,fs)
         energy = extractEnergy(x,fs)

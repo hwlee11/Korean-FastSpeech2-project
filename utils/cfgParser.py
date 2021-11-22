@@ -11,7 +11,7 @@ def cfgParser(path):
             continue
         name,value=data.split('=')
 
-        if name == 'lossFunction' or name == 'optimizer':
+        if name == 'lossFunction' or name == 'optimizer' or name == 'device':
             cfgDict[name] = value
         elif name == 'dropOut':
             cfgDict[name] = float(value)

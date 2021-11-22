@@ -36,7 +36,7 @@ class KssDataSet(Dataset):
         dataId = self.dataIdList[idx]
         phone = self.phoneDataDict[dataId]
         melSpec = self.melSpecDataDict[dataId]
-        mfa = self.mfaDataDict[dataId]
+        mfa = self.mfaDataDict[dataId].type(torch.FloatTensor)
         pitch = self.pitchDataDict[dataId]
         energy = self.energyDataDict[dataId]
 

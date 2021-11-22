@@ -13,15 +13,15 @@ ONS = ['k0', 'kk', 'nn', 't0', 'tt', 'rr', 'mm', 'p0', 'pp',
            's0', 'ss', 'oh', 'c0', 'cc', 'ch', 'kh', 'th', 'ph', 'h0']
 NUC = ['aa', 'qq', 'ya', 'yq', 'vv', 'ee', 'yv', 'ye', 'oo', 'wa',
            'wq', 'wo', 'yo', 'uu', 'wv', 'we', 'wi', 'yu', 'xx', 'xi', 'ii']
-COD = ['', 'kf', 'kk', 'ks', 'nf', 'nc', 'nh', 'tf',
+COD = ['kf', 'kk', 'ks', 'nf', 'nc', 'nh', 'tf',
            'll', 'lk', 'lm', 'lb', 'ls', 'lt', 'lp', 'lh',
            'mf', 'pf', 'ps', 's0', 'ss', 'oh', 'c0', 'ch',
            'kh', 'th', 'ph', 'h0']
 
 phone2integer = dict()
+phone_list.append('sil')
 phone_list = ONS + NUC + COD
 phone_list.append('ng')
-phone_list.append('sil')
 
 for i in range(len(phone_list)):
     phone2integer[phone_list[i]] = i

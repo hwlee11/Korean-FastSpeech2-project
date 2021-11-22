@@ -44,6 +44,7 @@ class SelfAttention(nn.Module):
         else:
             k = self.wK(h)
             v = self.wV(h)
+        #print('v',v)
 
         q = self.splitHead(q,q.size()[1])
         k = self.splitHead(k,k.size()[1])
@@ -57,7 +58,9 @@ class SelfAttention(nn.Module):
             mask=self.getMaskTensor(a,attentionMask)
             a.masked_fill_(mask,-1e9)
             a = self.softMax(a)
+            #print(a,v)
             h = torch.matmul(a,v)
+            #print('H tensro',h)
         #h = h.transpose(1,2).contiguous().view(-1,t,self.dDim*self.numOfHeads)
         h = h.transpose(1,2).reshape(-1,t,self.dDim*self.numOfHeads).contiguous()
         h = self.wH(h)
@@ -81,7 +84,7 @@ class SelfAttention(nn.Module):
 
 
 class Predictor(nn.Module):
-    def __init__(self,numOfPredictorLayer,dDim,numClass,kernelSize=3,bDuration=False):
+    def __init__(self,numOfPredictorLayer,dDim,numClass,kernelSize=3,dropout=0.5,bDuration=False):
         super().__init__()
 
         self.dDim = dDim
@@ -91,7 +94,7 @@ class Predictor(nn.Module):
         self.layerNormList = nn.ModuleList([nn.LayerNorm(dDim) for i in range(numOfPredictorLayer)])
         self.linear = nn.Linear(dDim,numClass)   # extra linear layer to output a scalar arXiv:1905.09263
         self.ReLU = nn.ReLU()
-        self.drop = nn.Dropout()
+        self.drop = nn.Dropout(p=dropout)
         self.loss = nn.MSELoss()
 
     def forward(self,x,lab=None):
@@ -111,13 +114,17 @@ class Predictor(nn.Module):
         return d,loss
 
 class VarianceAdaptor(nn.Module):
-    def __init__(self,numOfDurationPredictorLayer,dDim,bGenerating=False):
+    def __init__(self,numOfDurationPredictorLayer,
+            numOfPitchPredictorLayer,
+            numOfEnergyPredictorLayer,
+            kernelSize=3,
+            dDim=256,dropout=0.5,bGenerating=False):
         super().__init__()
         self.dDim = dDim
         self.bGenerating = bGenerating
-        self.durationPredictor = Predictor(numOfDurationPredictorLayer,dDim,1,kernelSize=3,bDuration=True)
-        self.pitchPredictor = Predictor(numOfDurationPredictorLayer,dDim,dDim,kernelSize=3)
-        self.energyPredictor = Predictor(numOfDurationPredictorLayer,dDim,dDim,kernelSize=3)
+        self.durationPredictor = Predictor(numOfDurationPredictorLayer,dDim,1,kernelSize=kernelSize,dropout=dropout,bDuration=True)
+        self.pitchPredictor = Predictor(numOfPitchPredictorLayer,dDim,dDim,kernelSize=kernelSize,dropout=dropout)
+        self.energyPredictor = Predictor(numOfEnergyPredictorLayer,dDim,dDim,kernelSize=kernelSize,dropout=dropout)
 
         self.pitchEmdedder = nn.Embedding(dDim,dDim)
         self.energyEmdedder = nn.Embedding(dDim,dDim)
@@ -221,31 +228,54 @@ class FFTBlock(nn.Module):
         return  w.view(-1,t,self.numOfHeads,self.dDim).transpose(1,2).contiguous()
 
 class FastSpeech2(nn.Module):
-    def __init__(self,numOfPhones=68,phoneEmbeddingDim=256,dDim=256,outputSpectrogramDim=128,bGenerating=False):
+    def __init__(self,
+            numOfEncoderBlocks=4,
+            encoderFftInnerDim=1024,
+            encoderKernelSize=9,
+            encoderNumOfHeads=2,
+            numOfDecoderBlocks=4,
+            decoderFftInnerDim=1024,
+            decoderKernelSize=9,
+            decoderNumOfHeads=2,
+            numOfPhones=69,
+            phoneEmbeddingDim=256,
+            dDim=256,
+            outputSpectrogramDim=128,
+            numOfDurationPredictorLayer=2,
+            numOfPitchPredictorLayer=2,
+            numOfEnergyPredictorLayer=2,
+            predictorKernelSize=3,
+            lossFunction='MSE',
+            fftDropOut=0.1,
+            predictorDropOut=0.5,
+            bGenerating=False):
         super().__init__()
 
         self.bGenerating = bGenerating
         #self.charEmbeddingLayer = nn.Linear(numOfPhones,phoneEmbeddingDim,bias=False)
         self.charEmbeddingLayer = nn.Embedding(numOfPhones,phoneEmbeddingDim)
-        self.encoderFFTBlocks = FFTBlock(numOfLayers=1,dDim=dDim,numOfHeads=2,innerLayerDim=1024,kernelSize=3)
-        self.varianceAdaptor = VarianceAdaptor(numOfDurationPredictorLayer=2,dDim=phoneEmbeddingDim,bGenerating=bGenerating)
-        self.decoderFFTBlocks = FFTBlock(numOfLayers=4,dDim=dDim,numOfHeads=2,innerLayerDim=1024,kernelSize=9)
+        #encoder
+        self.encoderFFTBlocks = FFTBlock(numOfLayers=numOfEncoderBlocks,dDim=dDim,numOfHeads=encoderNumOfHeads,innerLayerDim=encoderFftInnerDim,kernelSize=encoderKernelSize,dropoutProbability=fftDropOut)
+        #variance adaptor
+        self.varianceAdaptor = VarianceAdaptor(numOfDurationPredictorLayer=numOfDurationPredictorLayer,
+                numOfPitchPredictorLayer=numOfPitchPredictorLayer,
+                numOfEnergyPredictorLayer=numOfEnergyPredictorLayer,
+                kernelSize=predictorKernelSize,dDim=phoneEmbeddingDim,bGenerating=bGenerating)
+        #decoder
+        self.decoderFFTBlocks = FFTBlock(numOfLayers=numOfDecoderBlocks,dDim=dDim,numOfHeads=decoderNumOfHeads,innerLayerDim=decoderFftInnerDim,kernelSize=decoderKernelSize,dropoutProbability=fftDropOut)
         self.linear = nn.Linear(dDim,outputSpectrogramDim)
         self.dDim = dDim
         #self.loss = nn.L1Loss()
-        self.loss = nn.MSELoss()
+        if lossFunction == 'MSE':
+            self.loss = nn.MSELoss()
 
-    def forward(self,x,spectrogram,mfAlign,lengths=None,pitch=None,energy=None):
-        
+    def forward(self,x,spectrogram,mfAlign,lengths=None,pitch=None,energy=None,device='cpu'):
+
         x = self.charEmbeddingLayer(x)
-        charPositionEmbeddingTensor = self.positionEmbedding(x).expand(x.size()[0],-1,-1)
+        charPositionEmbeddingTensor = self.positionEmbedding(x,lengths).to(device)#.expand(x.size()[0],-1,-1)
         x += charPositionEmbeddingTensor
-        if lengths == None:
-            x = self.encoderFFTBlocks(x)
-        else:
-            #x = self.encoderFFTBlocks(x,attentionMask)
-            lengths = self.getLengthTensor(lengths)
-            x = self.encoderFFTBlocks(x,lengths)
+        masks = self.getMaskTensor(lengths)
+        x = self.encoderFFTBlocks(x,masks)
         
         #hiddenSeq,hiddenLength, dLoss = self.varianceAdaptor(x,mfAlign,pitch,energy)
         if self.bGenerating:
@@ -253,29 +283,38 @@ class FastSpeech2(nn.Module):
         else:
             hiddenSeq,hiddenLength,dLoss,pLoss,eLoss = self.varianceAdaptor(x,mfAlign,pitch,energy)
 
-        hiddenSeqPositionEmbeddingTensor = self.positionEmbedding(hiddenSeq).expand(x.size()[0],-1,-1)
+        hiddenSeqPositionEmbeddingTensor = self.positionEmbedding(hiddenSeq,hiddenLength).to(device)#.expand(x.size()[0],-1,-1)
         hiddenSeq += hiddenSeqPositionEmbeddingTensor
-        hiddenLength = self.getLengthTensor(hiddenLength)
-        hiddenSeq = self.decoderFFTBlocks(hiddenSeq,hiddenLength)
+        hiddenMask = self.getMaskTensor(hiddenLength)
+        hiddenSeq = self.decoderFFTBlocks(hiddenSeq,hiddenMask)
         outputSpectrogram = self.linear(hiddenSeq)
         if self.bGenerating:
             return outputSpectrogram
-        loss = self.loss(outputSpectrogram,spectrogram)
-        loss = loss + dLoss + pLoss + eLoss
-        return outputSpectrogram,loss
+        sLoss = self.loss(outputSpectrogram,spectrogram)
+        loss = sLoss + dLoss + pLoss + eLoss
 
-    def positionEmbedding(self,x):
-        positionLength = x.size()[1]
+        return outputSpectrogram,[loss,sLoss,dLoss,pLoss,eLoss]
+
+    def positionEmbedding(self,x,lengths):
+
+        numBatch = x.size()[0]
+        maxLength,_ = torch.max(lengths,0)
+        #positionLength = x.size()[1]
         dDim = x.size()[-1]
-        positionEmbeddingTensor = np.zeros(x.size()[1:])
-        for i in range(positionLength):
+        positionEmbeddingArray = np.zeros(x.size()[1:])
+        #for i in range(positionLength):
+        for i in range(maxLength):
             for j in range(0,dDim,2):
-                positionEmbeddingTensor[i][j] = math.sin(j/(10000**((2*j)/dDim)))
+                positionEmbeddingArray[i][j] = math.sin(i/(10000**((2*j)/dDim)))
             for j in range(1,dDim,2):
-                positionEmbeddingTensor[i][j] = math.cos(j/(10000**((2*j)/dDim)))
+                positionEmbeddingArray[i][j] = math.cos(i/(10000**((2*j)/dDim)))
+        positionEmbeddingTensor = torch.FloatTensor(positionEmbeddingArray).repeat(numBatch,1,1)
+        for i in range(numBatch):
+            positionEmbeddingTensor[i][lengths[i].item():,:].fill_(0.0)
+            
         return torch.FloatTensor(positionEmbeddingTensor)
 
-    def getLengthTensor(self,lengths):   # torch.tensor([4,3,2,5,3])
+    def getMaskTensor(self,lengths):   # torch.tensor([4,3,2,5,3])
         numBatch = lengths.size()[0]  
         maxLength,_ = torch.max(lengths,0)
         tmp1 = []
@@ -332,8 +371,28 @@ def main():
     dummyEnergy2 = torch.randint(1,256,(1,29))
     dummyEnergy = torch.cat((dummyEnergy1,dummyEnergy2),0)
 
-    fastSpeech = FastSpeech2()
-    output,loss = fastSpeech(dummyx,dummySpectrogram,dummyMFA,dummyxLength,dummyPitch,dummyEnergy)
+    fastSpeech = FastSpeech2(
+            numOfEncoderBlocks=4,
+            encoderFftInnerDim=1024,
+            encoderKernelSize=9,
+            encoderNumOfHeads=2,
+            numOfDecoderBlocks=4,
+            decoderFftInnerDim=1024,
+            decoderKernelSize=9,
+            decoderNumOfHeads=2,
+            numOfPhones=69,
+            phoneEmbeddingDim=256,
+            dDim=256,
+            outputSpectrogramDim=128,
+            numOfDurationPredictorLayer=2,
+            numOfPitchPredictorLayer=2,
+            numOfEnergyPredictorLayer=2,
+            predictorKernelSize=3,
+            lossFunction='MSE',
+            fftDropOut=0.1,
+            predictorDropOut=0.5,
+            )
+    output,loss,sLoss,dLoss,pLoss,eLoss = fastSpeech(dummyx,dummySpectrogram,dummyMFA,dummyxLength,dummyPitch,dummyEnergy)
     #fastSpeech = FastSpeech2(bGenerating=True)
     #output = fastSpeech(dummyx,dummySpectrogram,dummyMFA,dummyxLength,dummyPitch,dummyEnergy)
     print(output)
