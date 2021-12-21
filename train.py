@@ -10,6 +10,8 @@ from FastSpeech2 import FastSpeech2
 from KssDataSet import KssDataSet,kssDataCollate
 from utils import cfgParser
 
+#torch.set_printoptions(threshold=10000)
+
 def initLossSumList(lossList):
     for i in range(len(lossList)):
         lossList[i] = 0
@@ -162,7 +164,7 @@ def train(args):
             for j in range(len(lossList)):
                 lossList[j] += losss[j].item()
         for j in range(5):
-            lossList[j] = lossList[j]/numOfTrainBatch
+            lossList[j] = lossList[j]/numOfValBatch
         print('epoch : %d, steps : %d, lr : %0.5f, Average validation loss : %0.5f, mel-loss : %0.5f, duration-loss : %0.5f, pitch-loss : %0.5f, energy-loss : %0.5f' % (i+1,stepNum,lr,lossList[0],lossList[1],lossList[2],lossList[3],lossList[4]))
 
         initLossSumList(lossList)
@@ -177,7 +179,7 @@ def train(args):
             for j in range(len(lossList)):
                 lossList[j] += losss[j].item()
         for j in range(5):
-            lossList[j] = lossList[j]/numOfTrainBatch
+            lossList[j] = lossList[j]/numOfTestBatch
         print('epoch : %d, steps : %d, lr : %0.5f, Average test loss : %0.5f, mel-loss : %0.5f, duration-loss : %0.5f, pitch-loss : %0.5f, energy-loss : %0.5f' % (i+1,stepNum,lr,lossList[0],lossList[1],lossList[2],lossList[3],lossList[4]))
         
             

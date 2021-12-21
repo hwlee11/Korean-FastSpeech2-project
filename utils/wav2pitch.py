@@ -84,6 +84,7 @@ def extractEnergy(wave,samplingRate,n_fft=512,hop_length=10,win_length=30):
     energy = torch.sqrt(torch.pow(stft,2).sum(0))
     #energy = torch.norm(stft,dim=0)
     quantaizedEnergy = muEncoding(energy)
+    print(quantaizedEnergy.size())
 
     return quantaizedEnergy
 
@@ -97,6 +98,7 @@ def extractMelSpectrogram(wave,samplingRate,n_fft=512,hop_length=10,win_length=3
     transform = torchaudio.transforms.MelSpectrogram(samplingRate,n_fft=n_fft,win_length=win_length,hop_length=hop_length)
     melSpectrogram = transform(wave).T
     #melSpectrogram = torchaudio.compliance.kaldi.fbank(wave,frame_length=30.,frame_shift=10.,sample_frequency=samplingRate)
+    print(melSpectrogram.size())
 
     return melSpectrogram
 
@@ -121,6 +123,10 @@ def main(args):
         melSpectrogram = extractMelSpectrogram(x,fs)
         #print(melSpectrogram,melSpectrogram.size())
 
+        #print(f0.size(),energy.size(),melSpectrogram.size())
+        #if f0.size()[0] != energy.size()[0] or f0.size()[0] != melSpectrogram.size()[0]:
+        #    print(wavFile)
+        #    print(f0.size(),energy.size(),melSpectrogram.size())
         f0_dict[file_id] = f0
         energy_dict[file_id] = energy
         melSpec_dict[file_id] = melSpectrogram

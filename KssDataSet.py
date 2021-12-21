@@ -62,6 +62,11 @@ def kssDataCollate(batch):
     maxPitchLength = 0
     maxEnergyLength = 0
     for phone,melSpec,mfa,pitch,energy in batch:
+        #print(len(pitch),sum(mfa))
+        #if len(pitch) != sum(mfa).item():
+        #    print(len(pitch),sum(mfa).item())
+        #if len(pitch) == 529:
+        #    print(len(pitch),sum(mfa).item())
         lengthList.append(phone.size()[0])
         maxMelLength = max(melSpec.size()[0],maxMelLength) # zero padding
         phoneList.append(phone)
@@ -91,11 +96,14 @@ def kssDataCollate(batch):
 
 def main():
 
-    data = kssDataset('./data/val/val_phoneAlign.pickle','./data/val/val_melSpec.pickle','./data/val/val_f0.pickle','./data/val/val_energy.pickle')
+    #data = KssDataSet('./data/val/val_phoneAlign.pickle','./data/val/val_melSpec.pickle','./data/val/val_f0.pickle','./data/val/val_energy.pickle')
+    data = KssDataSet('./data/train/train_phoneAlign.pickle','./data/train/train_melSpec.pickle','./data/train/train_f0.pickle','./data/train/train_energy.pickle')
+    #data = KssDataSet('./data/test/test_phoneAlign.pickle','./data/test/test_melSpec.pickle','./data/test/test_f0.pickle','./data/test/test_energy.pickle')
     #print(len(data))
-    dataLoader = DataLoader(data,batch_size=10,collate_fn=kssDataCollate)
+    dataLoader = DataLoader(data,batch_size=1,collate_fn=kssDataCollate)
     for phone,length,melSpec,mfa,pitch,energy in dataLoader:
-        print(phone.size(),length.size(),melSpec.size(),mfa.size(),pitch.size(),energy.size())
+        pass
+        #print(phone.size(),length.size(),melSpec.size(),mfa.size(),pitch.size(),energy.size())
 
 
 if __name__ == "__main__":
