@@ -11,6 +11,14 @@ import os
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
+def dynamic_range_compression(x, C=1, clip_val=1e-5):
+    """
+    PARAMS
+    ------
+    C: compression factor
+    """
+    return torch.log(torch.clamp(x, min=clip_val) * C)
+
 def readWavFileList(listFileName,data_path_prefix):
 
     fileList = list()
@@ -95,10 +103,11 @@ def extractMelSpectrogram(wave,samplingRate,n_fft=512,hop_length=10,win_length=3
     n_fft = int(math.pow(2, math.ceil(math.log2(win_length))))
 
     wave = torch.tensor(wave,dtype=torch.float32)
-    transform = torchaudio.transforms.MelSpectrogram(samplingRate,n_fft=n_fft,win_length=win_length,hop_length=hop_length)
+    transform = torchaudio.transforms.MelSpectrogram(samplingRate,f_max=8000,n_mels=80,n_fft=n_fft,win_length=win_length,hop_length=hop_length)
     melSpectrogram = transform(wave).T
+    #spectral normalization
+    melSpectrogram = dynamic_range_compression(melSpectrogram)
     #melSpectrogram = torchaudio.compliance.kaldi.fbank(wave,frame_length=30.,frame_shift=10.,sample_frequency=samplingRate)
-    print(melSpectrogram.size())
 
     return melSpectrogram
 
@@ -107,6 +116,9 @@ def main(args):
     file_name = args.data_list_path
     save_path_prefix = args.save_path_prefix
     data_type = args.data_type
+    bFzero = args.fzero
+    bEnergy = args.energy
+    bMelSpec = args.melSpec
     fileList = readWavFileList(file_name,args.data_path_prefix)
 
     f0_dict = {}
@@ -118,39 +130,45 @@ def main(args):
         file_id = wavFile.split('/')[-1]
         file_id = file_id.split('.')[0]
         x,fs =sf.read(wavFile)
-        f0 = extractF0(x,fs)
-        energy = extractEnergy(x,fs)
-        melSpectrogram = extractMelSpectrogram(x,fs)
         #print(melSpectrogram,melSpectrogram.size())
 
         #print(f0.size(),energy.size(),melSpectrogram.size())
         #if f0.size()[0] != energy.size()[0] or f0.size()[0] != melSpectrogram.size()[0]:
         #    print(wavFile)
         #    print(f0.size(),energy.size(),melSpectrogram.size())
-        f0_dict[file_id] = f0
-        energy_dict[file_id] = energy
-        melSpec_dict[file_id] = melSpectrogram
+        if bFzero:
+            f0 = extractF0(x,fs)
+            f0_dict[file_id] = f0
+        if bEnergy:
+            energy = extractEnergy(x,fs)
+            energy_dict[file_id] = energy
+        if bMelSpec:
+            melSpectrogram = extractMelSpectrogram(x,fs)
+            melSpec_dict[file_id] = melSpectrogram
 
     #f0_file_name = file_name.replace('.scp','_f0.pickle')
-    f0_file_name = data_type+'_f0.pickle'
-    f0_file_save_path = os.path.join(save_path_prefix,f0_file_name)
-    f = open(f0_file_save_path,'wb')
-    pickle.dump(f0_dict,f)
-    f.close()
+    if bFzero:
+        f0_file_name = data_type+'_f0.pickle'
+        f0_file_save_path = os.path.join(save_path_prefix,f0_file_name)
+        f = open(f0_file_save_path,'wb')
+        pickle.dump(f0_dict,f)
+        f.close()
 
-    #energy_file_name = file_name.replace('.scp','_energy.pickle')
-    energy_file_name = data_type+'_energy.pickle'
-    energy_file_save_path = os.path.join(save_path_prefix,energy_file_name)
-    f = open(energy_file_save_path,'wb')
-    pickle.dump(energy_dict,f)
-    f.close()
+    if bEnergy:
+        #energy_file_name = file_name.replace('.scp','_energy.pickle')
+        energy_file_name = data_type+'_energy.pickle'
+        energy_file_save_path = os.path.join(save_path_prefix,energy_file_name)
+        f = open(energy_file_save_path,'wb')
+        pickle.dump(energy_dict,f)
+        f.close()
 
-    #melSpec_file_name = file_name.replace('.scp','_melSpec.pickle')
-    melSpec_file_name = data_type+'_melSpec.pickle'
-    melSpec_file_save_path = os.path.join(save_path_prefix,melSpec_file_name)
-    f = open(melSpec_file_save_path,'wb')
-    pickle.dump(melSpec_dict,f)
-    f.close()
+    if bMelSpec:
+        #melSpec_file_name = file_name.replace('.scp','_melSpec.pickle')
+        melSpec_file_name = data_type+'_melSpec.pickle'
+        melSpec_file_save_path = os.path.join(save_path_prefix,melSpec_file_name)
+        f = open(melSpec_file_save_path,'wb')
+        pickle.dump(melSpec_dict,f)
+        f.close()
 
 if __name__ == '__main__':
 
@@ -160,6 +178,9 @@ if __name__ == '__main__':
     parser.add_argument('--data_path_prefix',type=str,default='')
     parser.add_argument('--data_type',type=str,default='train')
     parser.add_argument('--save_path_prefix',type=str,default='')
+    parser.add_argument('--fzero',type=int,default=1)
+    parser.add_argument('--energy',type=int,default=1)
+    parser.add_argument('--melSpec',type=int,default=1)
     args = parser.parse_args()
 
     main(args)

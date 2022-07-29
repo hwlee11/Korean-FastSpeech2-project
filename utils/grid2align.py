@@ -34,6 +34,10 @@ PAD = 1024
 WINDOWSIZE = int( 30 * SAMPLINGRATE * 0.001 )
 SHIFTSIZE = int( 10 * SAMPLINGRATE * 0.001 )
 
+
+#def text2phone(string):
+#    
+
 def find_contents_idx(contents,words):
     idx = 0
     for i in contents:

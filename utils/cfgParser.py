@@ -11,9 +11,9 @@ def cfgParser(path):
             continue
         name,value=data.split('=')
 
-        if name == 'lossFunction' or name == 'optimizer' or name == 'device':
+        if name == 'lossFunction' or name == 'optimizer' or name == 'device' or name == 'predictorLossFunction':
             cfgDict[name] = value
-        elif name == 'dropOut':
+        elif name == 'fftDropOut' or name == 'predictorDropOut':
             cfgDict[name] = float(value)
         elif name.find('Path') != -1:
             cfgDict[name] = value

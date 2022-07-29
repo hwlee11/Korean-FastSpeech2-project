@@ -39,7 +39,8 @@ def train(args):
     decoderNumOfHeads=exp_cfg['decoderNumOfHeads']
     numOfPhones=exp_cfg['numOfPhones']
     phoneEmbeddingDim=exp_cfg['phoneEmbeddingDim']
-    dDim=exp_cfg['dDim']
+    encoderHiddenDim=exp_cfg['encoderHiddenDim']
+    decoderHiddenDim=exp_cfg['decoderHiddenDim']
     outputSpectrogramDim=exp_cfg['outputSpectrogramDim']
     numOfDurationPredictorLayer=exp_cfg['numOfDurationPredictorLayer']
     numOfPitchPredictorLayer=exp_cfg['numOfPitchPredictorLayer']
@@ -50,9 +51,11 @@ def train(args):
     epoch=exp_cfg['epoch']
     batchSize=exp_cfg['batchSize']
     lossFunction=exp_cfg['lossFunction']
+    predictorLossFunction=exp_cfg['predictorLossFunction']
     optimizerName=exp_cfg['optimizer']
     warmupSteps=exp_cfg['warmupSteps']
-    dropOut=exp_cfg['dropOut']
+    fftDropOut=exp_cfg['fftDropOut']
+    predictorDropOut=exp_cfg['predictorDropOut']
     #datapath
     trainPhoneAlignPath=exp_cfg['trainPhoneAlignPath']
     trainMelSpecPath=exp_cfg['trainMelSpecPath']
@@ -80,25 +83,27 @@ def train(args):
     
     # model load
     model = FastSpeech2(
-	    numOfEncoderBlocks=4,
-            encoderFftInnerDim=1024,
-            encoderKernelSize=9,
-            encoderNumOfHeads=2,
-            numOfDecoderBlocks=4,
-            decoderFftInnerDim=1024,
-            decoderKernelSize=9,
-            decoderNumOfHeads=2,
-            numOfPhones=69,
-            phoneEmbeddingDim=256,
-            dDim=256,
-            outputSpectrogramDim=128,
-            numOfDurationPredictorLayer=2,
-            numOfPitchPredictorLayer=2,
-            numOfEnergyPredictorLayer=2,
-            predictorKernelSize=3,
-            lossFunction='MSE',
-            fftDropOut=0.1,
-            predictorDropOut=0.5)
+	    numOfEncoderBlocks=numOfEncodingBlocks,
+            encoderFftInnerDim=encoderFftInnerDim,
+            encoderKernelSize=encoderKernelSize,
+            encoderNumOfHeads=encoderNumOfHeads,
+            numOfDecoderBlocks=numOfDecodingBlocks,
+            decoderFftInnerDim=decoderFftInnerDim,
+            decoderKernelSize=decoderKernelSize,
+            decoderNumOfHeads=decoderNumOfHeads,
+            numOfPhones=numOfPhones,
+            phoneEmbeddingDim=phoneEmbeddingDim,
+            encoderHiddenDim=encoderHiddenDim,
+            decoderHiddenDim=decoderHiddenDim,
+            outputSpectrogramDim=outputSpectrogramDim,
+            numOfDurationPredictorLayer=numOfDurationPredictorLayer,
+            numOfPitchPredictorLayer=numOfPitchPredictorLayer,
+            numOfEnergyPredictorLayer=numOfEnergyPredictorLayer,
+            predictorKernelSize=predictorKernelSize,
+            lossFunction=lossFunction,
+            predictorLossFunction=predictorLossFunction,
+            fftDropOut=fftDropOut,
+            predictorDropOut=predictorDropOut)
     device = torch.device(deviceName)
     model.to(device)
     expName = args.exp_config.split('/')[-1].replace('.cfg','')
@@ -106,8 +111,9 @@ def train(args):
 
     # optimizer
     stepNum = 1
+    logStep = 100
     warmupSteps = warmupSteps
-    learningRate = learningRateScheduler(dDim,stepNum,warmupSteps)
+    learningRate = learningRateScheduler(encoderHiddenDim,stepNum,warmupSteps)
     #print(learningRate)
     if optimizerName == 'ADAM':
         optimizer = optim.Adam(model.parameters(),lr=learningRate,betas=(0.9,0.98),eps=1e-09)
@@ -132,15 +138,20 @@ def train(args):
             #forward
             output,losss = model(phone,melSpec,mfa,length,pitch,energy,device)
             #update
+            optimizer.zero_grad()
             losss[0].backward()
-            lr = learningRateScheduler(dDim,stepNum,warmupSteps)
+            lr = learningRateScheduler(encoderHiddenDim,stepNum,warmupSteps)
             optimizer.lr = lr
+            #print('before',model.charEmbeddingLayer.weight)
+            #model.printWeight()
             optimizer.step()
+            #model.printWeight()
+            #print('after',model.charEmbeddingLayer.weight)
             for j in range(len(lossList)):
                 lossList[j] += losss[j].item()
                 runningLossList[j] += losss[j].item()
-            if stepNum % 50 == 0:
-                print('epoch : %d, steps : %d, lr : %0.5f, average running loss : %0.5f, mel-loss : %0.5f, duration-loss : %0.5f, pitch-loss : %0.5f, energy-loss : %0.5f' % (i+1,stepNum,lr,runningLossList[0]/50,runningLossList[1]/50,runningLossList[2]/50,runningLossList[3]/50,runningLossList[4]/50))
+            if stepNum % logStep == 0:
+                print('epoch : %d, steps : %d, lr : %0.5f, average running loss : %0.5f, mel-loss : %0.5f, duration-loss : %0.5f, pitch-loss : %0.5f, energy-loss : %0.5f' % (i+1,stepNum,lr,runningLossList[0]/logStep,runningLossList[1]/logStep,runningLossList[2]/logStep,runningLossList[3]/logStep,runningLossList[4]/logStep))
                 initLossSumList(runningLossList)
             stepNum+=1
         
